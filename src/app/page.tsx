@@ -1,65 +1,216 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useRef } from 'react';
 
 export default function Home() {
+  const [originalImage, setOriginalImage] = useState<string | null>(null);
+  const [resultImage, setResultImage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => setOriginalImage(e.target?.result as string);
+    reader.readAsDataURL(file);
+    setResultImage(null);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  const handleRemoveBackground = async () => {
+    if (!originalImage || !apiKey) {
+      alert('Please provide an image and API key');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/remove-background', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+        },
+        body: await fetch(originalImage).then((r) => r.blob()),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to process');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setResultImage(url);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to process image');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadResult = () => {
+    if (!resultImage) return;
+    const link = document.createElement('a');
+    link.href = resultImage;
+    link.download = 'removed-bg.png';
+    link.click();
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      <div className="container mx-auto px-4 py-12">
+        <h1 className="text-4xl font-bold text-center text-white mb-2">
+          🖼️ Image Background Remover
+        </h1>
+        <p className="text-center text-slate-400 mb-8">
+          AI-powered background removal using Alibaba Cloud
+        </p>
+
+        <div className="max-w-md mx-auto mb-8">
+          <label className="block text-sm font-medium text-slate-300 mb-2">
+            Alibaba Cloud API Key
+          </label>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="Enter your API key"
+            className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+          <p className="text-xs text-slate-500 mt-2">
+            Get your API key from{" "}
             <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              href="https://bailian.console.aliyun.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-purple-400 hover:underline"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+              Alibaba Cloud
+            </a>
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div
+          className={`max-w-2xl mx-auto border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${
+            dragOver
+              ? 'border-purple-500 bg-purple-500/10'
+              : 'border-slate-700 hover:border-slate-600'
+          }`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+        >
+          {originalImage ? (
+            <div className="space-y-4">
+              <img
+                src={originalImage}
+                alt="Original"
+                className="max-h-64 mx-auto rounded-lg shadow-lg"
+              />
+              <p className="text-slate-400">Original Image</p>
+              <button
+                onClick={() => {
+                  setOriginalImage(null);
+                  setResultImage(null);
+                }}
+                className="px-4 py-2 text-slate-400 hover:text-white"
+              >
+                Choose Another Image
+              </button>
+            </div>
+          ) : (
+            <div
+              className="cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="text-6xl mb-4">📁</div>
+              <p className="text-lg text-slate-300 mb-2">
+                Drag & drop an image here
+              </p>
+              <p className="text-slate-500">or click to browse</p>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+          />
         </div>
-      </main>
+
+        {originalImage && (
+          <div className="max-w-2xl mx-auto mt-8">
+            <button
+              onClick={handleRemoveBackground}
+              disabled={loading || !apiKey}
+              className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-slate-700 disabled:to-slate-700 text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:transform-none disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg
+                    className="animate-spin h-5 w-5"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Processing...
+                </span>
+              ) : (
+                '✨ Remove Background'
+              )}
+            </button>
+          </div>
+        )}
+
+        {resultImage && (
+          <div className="max-w-2xl mx-auto mt-8 space-y-4">
+            <div className="relative">
+              <img
+                src={resultImage}
+                alt="Result"
+                className="max-h-64 mx-auto rounded-lg shadow-lg bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2N89uzZfwY8QFJSEp80A+OoAcMhYCiD4WtAHD6XAtDgcMyCgUsdAAlKVTk46xT9H0MxcDwfM+YGcY+UA8D4B2XwD6lZ9pFoAAAAASUVORK5CYII=')]"
+              />
+              <p className="text-center text-slate-400 mt-2">
+                Result (Transparent Background)
+              </p>
+            </div>
+            <button
+              onClick={downloadResult}
+              className="w-full py-4 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-xl transition-all"
+            >
+              ⬇️ Download Result
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
