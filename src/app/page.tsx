@@ -6,7 +6,7 @@ export default function Home() {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [apiKey, setApiKey] = useState('');
+  const [progress, setProgress] = useState<string>('');
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -29,31 +29,40 @@ export default function Home() {
   };
 
   const handleRemoveBackground = async () => {
-    if (!originalImage || !apiKey) {
-      alert('Please provide an image and API key');
+    if (!originalImage) {
+      alert('Please select an image first');
       return;
     }
 
     setLoading(true);
+    setProgress('Loading AI model...');
     try {
-      const response = await fetch('/api/remove-background', {
+      // Convert base64 to blob
+      const response = await fetch(originalImage);
+      const blob = await response.blob();
+
+      const formData = new FormData();
+      formData.append('image', blob, 'image.png');
+
+      setProgress('Processing... (first time may take longer to download model)');
+      
+      const apiResponse = await fetch('/api/remove-background', {
         method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-        },
-        body: await fetch(originalImage).then((r) => r.blob()),
+        body: formData,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
+      if (!apiResponse.ok) {
+        const error = await apiResponse.json();
         throw new Error(error.error || 'Failed to process');
       }
 
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+      const resultBlob = await apiResponse.blob();
+      const url = URL.createObjectURL(resultBlob);
       setResultImage(url);
+      setProgress('');
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to process image');
+      setProgress('');
     } finally {
       setLoading(false);
     }
@@ -74,30 +83,13 @@ export default function Home() {
           🖼️ Image Background Remover
         </h1>
         <p className="text-center text-slate-400 mb-8">
-          AI-powered background removal using Alibaba Cloud
+          AI-powered background removal using local AI model
         </p>
 
-        <div className="max-w-md mx-auto mb-8">
-          <label className="block text-sm font-medium text-slate-300 mb-2">
-            Alibaba Cloud API Key
-          </label>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Enter your API key"
-            className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-          <p className="text-xs text-slate-500 mt-2">
-            Get your API key from{" "}
-            <a
-              href="https://bailian.console.aliyun.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-purple-400 hover:underline"
-            >
-              Alibaba Cloud
-            </a>
+        <div className="max-w-2xl mx-auto mb-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+          <p className="text-sm text-slate-300">
+            💡 <strong>No API Key needed!</strong> This version uses a local AI model.
+            First time processing may take longer to download the model.
           </p>
         </div>
 
@@ -157,7 +149,7 @@ export default function Home() {
           <div className="max-w-2xl mx-auto mt-8">
             <button
               onClick={handleRemoveBackground}
-              disabled={loading || !apiKey}
+              disabled={loading}
               className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-slate-700 disabled:to-slate-700 text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:transform-none disabled:cursor-not-allowed"
             >
               {loading ? (
@@ -181,7 +173,7 @@ export default function Home() {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     />
                   </svg>
-                  Processing...
+                  {progress || 'Processing...'}
                 </span>
               ) : (
                 '✨ Remove Background'
