@@ -7,6 +7,7 @@ export default function Home() {
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<string>('');
+  const [apiKey, setApiKey] = useState<string>('sk-6e46c0db88e445d6bcdc825a11628bb9');
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -29,35 +30,49 @@ export default function Home() {
   };
 
   const handleRemoveBackground = async () => {
-    if (!originalImage) {
-      alert('Please select an image first');
+    if (!originalImage || !apiKey) {
+      alert('Please select an image and API key');
       return;
     }
 
     setLoading(true);
-    setProgress('Loading AI model...');
+    setProgress('Processing...');
     try {
-      // Convert base64 to blob
-      const response = await fetch(originalImage);
-      const blob = await response.blob();
-
-      const formData = new FormData();
-      formData.append('image', blob, 'image.png');
-
-      setProgress('Processing... (first time may take longer to download model)');
-      
-      const apiResponse = await fetch('/api/remove-background', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!apiResponse.ok) {
-        const error = await apiResponse.json();
-        throw new Error(error.error || 'Failed to process');
+      // Convert base64 to binary
+      const base64Data = originalImage.split(',')[1];
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
       }
 
-      const resultBlob = await apiResponse.blob();
-      const url = URL.createObjectURL(resultBlob);
+      // Call Alibaba Cloud API directly from browser
+      const response = await fetch('https://vision.cn-hangzhou.aliyuncs.com/api/v1/recognition/background_removal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Token': `APITOKEN:${apiKey}`,
+        },
+        body: JSON.stringify({
+          imageURL: originalImage,
+          imageFormat: 'png',
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.Code) {
+        throw new Error(result.Message || 'API error');
+      }
+
+      if (!result.Data?.ImageURL) {
+        throw new Error('No result image');
+      }
+
+      // Download result image
+      const imgResponse = await fetch(result.Data.ImageURL);
+      const blob = await imgResponse.blob();
+      const url = URL.createObjectURL(blob);
       setResultImage(url);
       setProgress('');
     } catch (error) {
@@ -83,14 +98,20 @@ export default function Home() {
           🖼️ Image Background Remover
         </h1>
         <p className="text-center text-slate-400 mb-8">
-          AI-powered background removal using local AI model
+          AI-powered background removal using Alibaba Cloud
         </p>
 
-        <div className="max-w-2xl mx-auto mb-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-          <p className="text-sm text-slate-300">
-            💡 <strong>No API Key needed!</strong> This version uses a local AI model.
-            First time processing may take longer to download the model.
-          </p>
+        <div className="max-w-md mx-auto mb-8">
+          <label className="block text-sm font-medium text-slate-300 mb-2">
+            Alibaba Cloud API Key
+          </label>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="Enter your API key"
+            className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
         </div>
 
         <div
@@ -149,7 +170,7 @@ export default function Home() {
           <div className="max-w-2xl mx-auto mt-8">
             <button
               onClick={handleRemoveBackground}
-              disabled={loading}
+              disabled={loading || !apiKey}
               className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-slate-700 disabled:to-slate-700 text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:transform-none disabled:cursor-not-allowed"
             >
               {loading ? (

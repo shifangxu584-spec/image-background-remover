@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { removeBackground } from '@imgly/background-removal';
-import { Readable } from 'stream';
 
 export const dynamic = 'force-dynamic';
 
