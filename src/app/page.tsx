@@ -1,0 +1,229 @@
+'use client';
+
+import { useState, useRef } from 'react';
+
+export default function Home() {
+  const [originalImage, setOriginalImage] = useState<string | null>(null);
+  const [resultImage, setResultImage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<string>('');
+  const [apiKey, setApiKey] = useState<string>('sk-6e46c0db88e445d6bcdc825a11628bb9');
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => setOriginalImage(e.target?.result as string);
+    reader.readAsDataURL(file);
+    setResultImage(null);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  const handleRemoveBackground = async () => {
+    if (!originalImage || !apiKey) {
+      alert('Please select an image and API key');
+      return;
+    }
+
+    setLoading(true);
+    setProgress('Processing...');
+    try {
+      // Convert base64 to binary
+      const base64Data = originalImage.split(',')[1];
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Call Alibaba Cloud API directly from browser
+      const response = await fetch('https://vision.cn-hangzhou.aliyuncs.com/api/v1/recognition/background_removal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Token': `APITOKEN:${apiKey}`,
+        },
+        body: JSON.stringify({
+          imageURL: originalImage,
+          imageFormat: 'png',
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.Code) {
+        throw new Error(result.Message || 'API error');
+      }
+
+      if (!result.Data?.ImageURL) {
+        throw new Error('No result image');
+      }
+
+      // Download result image
+      const imgResponse = await fetch(result.Data.ImageURL);
+      const blob = await imgResponse.blob();
+      const url = URL.createObjectURL(blob);
+      setResultImage(url);
+      setProgress('');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to process image');
+      setProgress('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadResult = () => {
+    if (!resultImage) return;
+    const link = document.createElement('a');
+    link.href = resultImage;
+    link.download = 'removed-bg.png';
+    link.click();
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      <div className="container mx-auto px-4 py-12">
+        <h1 className="text-4xl font-bold text-center text-white mb-2">
+          🖼️ Image Background Remover
+        </h1>
+        <p className="text-center text-slate-400 mb-8">
+          AI-powered background removal using Alibaba Cloud
+        </p>
+
+        <div className="max-w-md mx-auto mb-8">
+          <label className="block text-sm font-medium text-slate-300 mb-2">
+            Alibaba Cloud API Key
+          </label>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="Enter your API key"
+            className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
+
+        <div
+          className={`max-w-2xl mx-auto border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${
+            dragOver
+              ? 'border-purple-500 bg-purple-500/10'
+              : 'border-slate-700 hover:border-slate-600'
+          }`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+        >
+          {originalImage ? (
+            <div className="space-y-4">
+              <img
+                src={originalImage}
+                alt="Original"
+                className="max-h-64 mx-auto rounded-lg shadow-lg"
+              />
+              <p className="text-slate-400">Original Image</p>
+              <button
+                onClick={() => {
+                  setOriginalImage(null);
+                  setResultImage(null);
+                }}
+                className="px-4 py-2 text-slate-400 hover:text-white"
+              >
+                Choose Another Image
+              </button>
+            </div>
+          ) : (
+            <div
+              className="cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="text-6xl mb-4">📁</div>
+              <p className="text-lg text-slate-300 mb-2">
+                Drag & drop an image here
+              </p>
+              <p className="text-slate-500">or click to browse</p>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+          />
+        </div>
+
+        {originalImage && (
+          <div className="max-w-2xl mx-auto mt-8">
+            <button
+              onClick={handleRemoveBackground}
+              disabled={loading || !apiKey}
+              className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-slate-700 disabled:to-slate-700 text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:transform-none disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg
+                    className="animate-spin h-5 w-5"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  {progress || 'Processing...'}
+                </span>
+              ) : (
+                '✨ Remove Background'
+              )}
+            </button>
+          </div>
+        )}
+
+        {resultImage && (
+          <div className="max-w-2xl mx-auto mt-8 space-y-4">
+            <div className="relative">
+              <img
+                src={resultImage}
+                alt="Result"
+                className="max-h-64 mx-auto rounded-lg shadow-lg bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2N89uzZfwY8QFJSEp80A+OoAcMhYCiD4WtAHD6XAtDgcMyCgUsdAAlKVTk46xT9H0MxcDwfM+YGcY+UA8D4B2XwD6lZ9pFoAAAAASUVORK5CYII=')]"
+              />
+              <p className="text-center text-slate-400 mt-2">
+                Result (Transparent Background)
+              </p>
+            </div>
+            <button
+              onClick={downloadResult}
+              className="w-full py-4 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-xl transition-all"
+            >
+              ⬇️ Download Result
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
